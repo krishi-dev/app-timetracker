@@ -89,8 +89,13 @@ export function TimeSlotGrid({ date, onDataChange }: TimeSlotGridProps) {
   };
 
   const selectRange = (startIndex: number, endIndex: number) => {
-    const start = Math.min(startIndex, endIndex);
-    const end = Math.max(startIndex, endIndex);
+    // Only allow downward selection
+    if (endIndex < startIndex) {
+      return;
+    }
+    
+    const start = startIndex;
+    const end = endIndex;
     
     const rangeSlots = timeSlots.slice(start, end + 1).map(slot => slot.time);
     setSelectedSlots(rangeSlots);
@@ -103,7 +108,10 @@ export function TimeSlotGrid({ date, onDataChange }: TimeSlotGridProps) {
     onPanResponderMove: (evt, gestureState) => {
       if (isDragging && dragStartIndex !== null) {
         const currentIndex = getSlotIndexFromPosition(evt.nativeEvent.pageY);
-        selectRange(dragStartIndex, currentIndex);
+        // Only allow dragging downward
+        if (currentIndex >= dragStartIndex) {
+          selectRange(dragStartIndex, currentIndex);
+        }
       }
     },
     
@@ -264,9 +272,6 @@ export function TimeSlotGrid({ date, onDataChange }: TimeSlotGridProps) {
                   </Text>
                 )}
               </View>
-              {selectedSlots.includes(slot.time) && (
-                <View style={styles.selectionOverlay} />
-              )}
             </TouchableOpacity>
           ))}
         </View>
@@ -369,20 +374,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   selectedSlot: {
-    borderColor: '#3b82f6',
-    borderWidth: 2,
+    borderColor: '#3b82f6 !important',
+    borderWidth: 3,
+    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+    shadowColor: '#3b82f6',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
   },
   draggingMode: {
     opacity: 0.8,
-  },
-  selectionOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(59, 130, 246, 0.2)',
-    borderRadius: 6,
   },
   timeText: {
     fontSize: 11,
