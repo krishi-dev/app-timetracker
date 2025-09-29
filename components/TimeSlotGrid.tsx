@@ -8,10 +8,14 @@ import {
   Alert,
   Modal,
   Pressable,
+  PanResponder,
+  Dimensions,
 } from 'react-native';
 import { generateTimeSlots, formatTime } from '@/utils/timeUtils';
 import { getTimeLogsForDate, getCategories, bulkLogTime, deleteTimeLog } from '@/services/database';
 import { Category, TimeLog, TimeSlot } from '@/types/database';
+
+const { height: screenHeight } = Dimensions.get('window');
 
 interface TimeSlotGridProps {
   date: string;
@@ -22,14 +26,24 @@ export function TimeSlotGrid({ date, onDataChange }: TimeSlotGridProps) {
   const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedSlots, setSelectedSlots] = useState<string[]>([]);
-  const [isSelecting, setIsSelecting] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [pendingSlots, setPendingSlots] = useState<string[]>([]);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStartIndex, setDragStartIndex] = useState<number | null>(null);
+  const [longPressTimer, setLongPressTimer] = useState<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     loadData();
   }, [date]);
+
+  useEffect(() => {
+    return () => {
+      if (longPressTimer) {
+        clearTimeout(longPressTimer);
+      }
+    };
+  }, [longPressTimer]);
 
   const loadData = async () => {
     setLoading(true);
@@ -61,53 +75,109 @@ export function TimeSlotGrid({ date, onDataChange }: TimeSlotGridProps) {
     }
   };
 
-  const handleSlotPress = (time: string) => {
-    if (isSelecting) {
-      setSelectedSlots(prev => 
-        prev.includes(time) 
-          ? prev.filter(t => t !== time)
-          : [...prev, time]
-      );
-    } else {
-      // Single slot assignment
-      const slot = timeSlots.find(s => s.time === time);
-      if (slot?.category) {
-        // Delete existing log
-        Alert.alert(
-          'Remove Time Log',
-          `Remove ${slot.category.name} from ${formatTime(time)}?`,
-          [
-            { text: 'Cancel', style: 'cancel' },
-            {
-              text: 'Remove',
-              style: 'destructive',
-              onPress: async () => {
-                try {
-                  await deleteTimeLog(date, time);
-                  await loadData();
-                  onDataChange();
-                } catch (error) {
-                  Alert.alert('Error', 'Failed to remove time log');
-                }
+  const getSlotIndexFromPosition = (y: number): number => {
+    // Calculate which slot index based on Y position
+    // This is an approximation - you might need to adjust based on your layout
+    const headerHeight = 120; // Approximate header height
+    const slotHeight = 47; // 45px height + 2px margin
+    const scrollOffset = 0; // You might need to track scroll position
+    
+    const adjustedY = y - headerHeight + scrollOffset;
+    const index = Math.floor(adjustedY / slotHeight);
+    
+    return Math.max(0, Math.min(index, timeSlots.length - 1));
+  };
+
+  const selectRange = (startIndex: number, endIndex: number) => {
+    const start = Math.min(startIndex, endIndex);
+    const end = Math.max(startIndex, endIndex);
+    
+    const rangeSlots = timeSlots.slice(start, end + 1).map(slot => slot.time);
+    setSelectedSlots(rangeSlots);
+  };
+
+  const panResponder = PanResponder.create({
+    onStartShouldSetPanResponder: () => false,
+    onMoveShouldSetPanResponder: () => isDragging,
+    
+    onPanResponderMove: (evt, gestureState) => {
+      if (isDragging && dragStartIndex !== null) {
+        const currentIndex = getSlotIndexFromPosition(evt.nativeEvent.pageY);
+        selectRange(dragStartIndex, currentIndex);
+      }
+    },
+    
+    onPanResponderRelease: () => {
+      if (isDragging && selectedSlots.length > 0) {
+        showCategorySelection(selectedSlots);
+      }
+      setIsDragging(false);
+      setDragStartIndex(null);
+    },
+  });
+
+  const handleSlotLongPress = (time: string, index: number) => {
+    const slot = timeSlots.find(s => s.time === time);
+    if (slot?.category) {
+      // If slot has category, show delete confirmation
+      Alert.alert(
+        'Remove Time Log',
+        `Remove ${slot.category.name} from ${formatTime(time)}?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Remove',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                await deleteTimeLog(date, time);
+                await loadData();
+                onDataChange();
+              } catch (error) {
+                Alert.alert('Error', 'Failed to remove time log');
               }
             }
-          ]
-        );
-      } else {
-        // Show category selection
+          }
+        ]
+      );
+    } else {
+      // Start drag selection
+      setIsDragging(true);
+      setDragStartIndex(index);
+      setSelectedSlots([time]);
+    }
+  };
+
+  const handleSlotPressIn = (time: string, index: number) => {
+    const timer = setTimeout(() => {
+      handleSlotLongPress(time, index);
+    }, 500); // 500ms for long press
+    
+    setLongPressTimer(timer);
+  };
+
+  const handleSlotPressOut = () => {
+    if (longPressTimer) {
+      clearTimeout(longPressTimer);
+      setLongPressTimer(null);
+    }
+  };
+
+  const handleSlotPress = (time: string) => {
+    // Only handle quick tap if not dragging
+    if (!isDragging) {
+      const slot = timeSlots.find(s => s.time === time);
+      if (!slot?.category) {
+        // Show category selection for single slot
         showCategorySelection([time]);
       }
     }
   };
 
-  const startBulkSelection = () => {
-    setIsSelecting(true);
+  const cancelSelection = () => {
     setSelectedSlots([]);
-  };
-
-  const cancelBulkSelection = () => {
-    setIsSelecting(false);
-    setSelectedSlots([]);
+    setIsDragging(false);
+    setDragStartIndex(null);
   };
 
   const showCategorySelection = (slots: string[]) => {
@@ -125,8 +195,9 @@ export function TimeSlotGrid({ date, onDataChange }: TimeSlotGridProps) {
       await bulkLogTime(date, pendingSlots, categoryId);
       await loadData();
       onDataChange();
-      setIsSelecting(false);
       setSelectedSlots([]);
+      setIsDragging(false);
+      setDragStartIndex(null);
       setShowCategoryModal(false);
       setPendingSlots([]);
     } catch (error) {
@@ -137,14 +208,7 @@ export function TimeSlotGrid({ date, onDataChange }: TimeSlotGridProps) {
   const closeCategoryModal = () => {
     setShowCategoryModal(false);
     setPendingSlots([]);
-  };
-
-  const assignSelectedSlots = () => {
-    if (selectedSlots.length === 0) {
-      Alert.alert('No Selection', 'Please select some time slots first');
-      return;
-    }
-    showCategorySelection(selectedSlots);
+    cancelSelection();
   };
 
   if (loading) {
@@ -156,27 +220,19 @@ export function TimeSlotGrid({ date, onDataChange }: TimeSlotGridProps) {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} {...panResponder.panHandlers}>
       <View style={styles.header}>
         <Text style={styles.headerText}>
-          {isSelecting ? `${selectedSlots.length} slots selected` : 'Tap to assign category'}
+          {selectedSlots.length > 0 
+            ? `${selectedSlots.length} slots selected` 
+            : 'Tap to assign • Long press & drag to select multiple'
+          }
         </Text>
-        <View style={styles.headerButtons}>
-          {!isSelecting ? (
-            <TouchableOpacity style={styles.bulkButton} onPress={startBulkSelection}>
-              <Text style={styles.bulkButtonText}>Bulk Select</Text>
-            </TouchableOpacity>
-          ) : (
-            <>
-              <TouchableOpacity style={styles.assignButton} onPress={assignSelectedSlots}>
-                <Text style={styles.assignButtonText}>Assign</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.cancelButton} onPress={cancelBulkSelection}>
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
-            </>
-          )}
-        </View>
+        {selectedSlots.length > 0 && (
+          <TouchableOpacity style={styles.cancelButton} onPress={cancelSelection}>
+            <Text style={styles.cancelButtonText}>Cancel</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       <ScrollView style={styles.scrollView}>
@@ -188,8 +244,11 @@ export function TimeSlotGrid({ date, onDataChange }: TimeSlotGridProps) {
                 styles.slot,
                 slot.category && { backgroundColor: slot.category.color },
                 selectedSlots.includes(slot.time) && styles.selectedSlot,
+                isDragging && styles.draggingMode,
               ]}
               onPress={() => handleSlotPress(slot.time)}
+              onPressIn={() => handleSlotPressIn(slot.time, index)}
+              onPressOut={handleSlotPressOut}
               activeOpacity={0.7}
             >
               <View style={styles.slotContent}>
@@ -274,32 +333,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#374151',
-  },
-  headerButtons: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  bulkButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: '#3b82f6',
-    borderRadius: 6,
-  },
-  bulkButtonText: {
-    color: '#ffffff',
-    fontWeight: '600',
-    fontSize: 14,
-  },
-  assignButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: '#10b981',
-    borderRadius: 6,
-  },
-  assignButtonText: {
-    color: '#ffffff',
-    fontWeight: '600',
-    fontSize: 14,
+    flex: 1,
   },
   cancelButton: {
     paddingHorizontal: 16,
@@ -337,6 +371,9 @@ const styles = StyleSheet.create({
   selectedSlot: {
     borderColor: '#3b82f6',
     borderWidth: 2,
+  },
+  draggingMode: {
+    opacity: 0.8,
   },
   selectionOverlay: {
     position: 'absolute',
