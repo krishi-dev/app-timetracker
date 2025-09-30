@@ -33,7 +33,7 @@ export function TimeSlotGrid({ date, onDataChange }: TimeSlotGridProps) {
   const [dragStartIndex, setDragStartIndex] = useState<number | null>(null);
   const [longPressTimer, setLongPressTimer] = useState<NodeJS.Timeout | null>(null);
   const [currentTimePosition, setCurrentTimePosition] = useState<number | null>(null);
-  const [scrollViewRef, setScrollViewRef] = useState<ScrollView | null>(null);
+  const scrollViewRef = useRef<ScrollView>(null);
 
   useEffect(() => {
     loadData();
@@ -46,11 +46,12 @@ export function TimeSlotGrid({ date, onDataChange }: TimeSlotGridProps) {
   }, [date, timeSlots]);
 
   useEffect(() => {
-    // Auto-scroll to current time when component loads or date changes
-    if (currentTimePosition !== null && scrollViewRef && timeSlots.length > 0) {
+    // Auto-scroll to current time when data loads and it's today
+    if (currentTimePosition !== null && timeSlots.length > 0 && date === getCurrentDateString()) {
       scrollToCurrentTime();
     }
-  }, [currentTimePosition, scrollViewRef, timeSlots]);
+  }, [currentTimePosition, timeSlots, date]);
+
   useEffect(() => {
     return () => {
       if (longPressTimer) {
@@ -60,18 +61,18 @@ export function TimeSlotGrid({ date, onDataChange }: TimeSlotGridProps) {
   }, [longPressTimer]);
 
   const scrollToCurrentTime = () => {
-    if (currentTimePosition !== null && scrollViewRef) {
+    if (currentTimePosition !== null && scrollViewRef.current) {
       const slotHeight = 47; // 45px slot + 2px margin
       const scrollPosition = currentTimePosition * slotHeight;
       const screenCenter = screenHeight / 2;
       const targetScrollY = Math.max(0, scrollPosition - screenCenter);
       
       setTimeout(() => {
-        scrollViewRef.scrollTo({
+        scrollViewRef.current?.scrollTo({
           y: targetScrollY,
           animated: true,
         });
-      }, 100); // Small delay to ensure layout is complete
+      }, 300); // Increased delay to ensure layout is complete
     }
   };
   const updateCurrentTimePosition = () => {
@@ -278,6 +279,11 @@ export function TimeSlotGrid({ date, onDataChange }: TimeSlotGridProps) {
       </View>
 
       <ScrollView style={styles.scrollView}>
+      <ScrollView 
+        ref={scrollViewRef}
+        style={styles.scrollView}
+        showsVerticalScrollIndicator={true}
+      >
         <View style={styles.grid}>
           {currentTimePosition !== null && (
             <View 
