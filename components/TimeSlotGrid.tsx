@@ -32,10 +32,17 @@ export function TimeSlotGrid({ date, onDataChange }: TimeSlotGridProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [dragStartIndex, setDragStartIndex] = useState<number | null>(null);
   const [longPressTimer, setLongPressTimer] = useState<NodeJS.Timeout | null>(null);
+  const [currentTimePosition, setCurrentTimePosition] = useState<number | null>(null);
 
   useEffect(() => {
     loadData();
   }, [date]);
+
+  useEffect(() => {
+    updateCurrentTimePosition();
+    const interval = setInterval(updateCurrentTimePosition, 60000); // Update every minute
+    return () => clearInterval(interval);
+  }, [date, timeSlots]);
 
   useEffect(() => {
     return () => {
@@ -44,6 +51,25 @@ export function TimeSlotGrid({ date, onDataChange }: TimeSlotGridProps) {
       }
     };
   }, [longPressTimer]);
+
+  const updateCurrentTimePosition = () => {
+    const now = new Date();
+    const today = now.toISOString().split('T')[0];
+    
+    // Only show current time indicator for today
+    if (date !== today) {
+      setCurrentTimePosition(null);
+      return;
+    }
+    
+    const currentHour = now.getHours();
+    const currentMinute = now.getMinutes();
+    
+    // Calculate position as percentage of the day
+    const totalMinutes = currentHour * 60 + currentMinute;
+    const slotIndex = Math.floor(totalMinutes / 15);
+    setCurrentTimePosition(slotIndex);
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -76,16 +102,8 @@ export function TimeSlotGrid({ date, onDataChange }: TimeSlotGridProps) {
   };
 
   const getSlotIndexFromPosition = (y: number): number => {
-    // Calculate which slot index based on Y position
-    // This is an approximation - you might need to adjust based on your layout
-    const headerHeight = 120; // Approximate header height
-    const slotHeight = 47; // 45px height + 2px margin
-    const scrollOffset = 0; // You might need to track scroll position
-    
-    const adjustedY = y - headerHeight + scrollOffset;
-    const index = Math.floor(adjustedY / slotHeight);
-    
-    return Math.max(0, Math.min(index, timeSlots.length - 1));
+    // This is handled by the touch events on individual slots now
+    return -1;
   };
 
   const selectRange = (startIndex: number, endIndex: number) => {
@@ -101,28 +119,11 @@ export function TimeSlotGrid({ date, onDataChange }: TimeSlotGridProps) {
     setSelectedSlots(rangeSlots);
   };
 
-  const panResponder = PanResponder.create({
-    onStartShouldSetPanResponder: () => false,
-    onMoveShouldSetPanResponder: () => isDragging,
-    
-    onPanResponderMove: (evt, gestureState) => {
-      if (isDragging && dragStartIndex !== null) {
-        const currentIndex = getSlotIndexFromPosition(evt.nativeEvent.pageY);
-        // Only allow dragging downward
-        if (currentIndex >= dragStartIndex) {
-          selectRange(dragStartIndex, currentIndex);
-        }
-      }
-    },
-    
-    onPanResponderRelease: () => {
-      if (isDragging && selectedSlots.length > 0) {
-        showCategorySelection(selectedSlots);
-      }
-      setIsDragging(false);
-      setDragStartIndex(null);
-    },
-  });
+  const handleSlotDragEnter = (index: number) => {
+    if (isDragging && dragStartIndex !== null && index >= dragStartIndex) {
+      selectRange(dragStartIndex, index);
+    }
+  };
 
   const handleSlotLongPress = (time: string, index: number) => {
     const slot = timeSlots.find(s => s.time === time);
@@ -173,12 +174,23 @@ export function TimeSlotGrid({ date, onDataChange }: TimeSlotGridProps) {
 
   const handleSlotPress = (time: string) => {
     // Only handle quick tap if not dragging
-    if (!isDragging) {
+    if (!isDragging && longPressTimer) {
+      // Cancel long press if user taps quickly
+      clearTimeout(longPressTimer);
+      setLongPressTimer(null);
+      
       const slot = timeSlots.find(s => s.time === time);
       if (!slot?.category) {
         // Show category selection for single slot
         showCategorySelection([time]);
       }
+    } else if (isDragging) {
+      // Handle drag release
+      if (selectedSlots.length > 0) {
+        showCategorySelection(selectedSlots);
+      }
+      setIsDragging(false);
+      setDragStartIndex(null);
     }
   };
 
@@ -228,7 +240,7 @@ export function TimeSlotGrid({ date, onDataChange }: TimeSlotGridProps) {
   }
 
   return (
-    <View style={styles.container} {...panResponder.panHandlers}>
+    <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerText}>
           {selectedSlots.length > 0 
@@ -245,6 +257,14 @@ export function TimeSlotGrid({ date, onDataChange }: TimeSlotGridProps) {
 
       <ScrollView style={styles.scrollView}>
         <View style={styles.grid}>
+          {currentTimePosition !== null && (
+            <View 
+              style={[
+                styles.currentTimeLine,
+                { top: currentTimePosition * 47 + 8 } // 47px per slot + 8px offset
+              ]} 
+            />
+          )}
           {timeSlots.map((slot, index) => (
             <TouchableOpacity
               key={slot.time}
@@ -257,6 +277,12 @@ export function TimeSlotGrid({ date, onDataChange }: TimeSlotGridProps) {
               onPress={() => handleSlotPress(slot.time)}
               onPressIn={() => handleSlotPressIn(slot.time, index)}
               onPressOut={handleSlotPressOut}
+              onPressIn={() => {
+                handleSlotPressIn(slot.time, index);
+                if (isDragging) {
+                  handleSlotDragEnter(index);
+                }
+              }}
               activeOpacity={0.7}
             >
               <View style={styles.slotContent}>
@@ -357,6 +383,7 @@ const styles = StyleSheet.create({
   grid: {
     padding: 16,
     gap: 2,
+    position: 'relative',
   },
   slot: {
     height: 45,
@@ -385,6 +412,20 @@ const styles = StyleSheet.create({
   },
   draggingMode: {
     opacity: 0.8,
+  },
+  currentTimeLine: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    height: 2,
+    backgroundColor: '#ef4444',
+    zIndex: 10,
+    borderRadius: 1,
+    shadowColor: '#ef4444',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.5,
+    shadowRadius: 2,
+    elevation: 5,
   },
   timeText: {
     fontSize: 11,
