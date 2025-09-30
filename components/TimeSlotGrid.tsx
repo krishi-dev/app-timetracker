@@ -33,6 +33,7 @@ export function TimeSlotGrid({ date, onDataChange }: TimeSlotGridProps) {
   const [dragStartIndex, setDragStartIndex] = useState<number | null>(null);
   const [longPressTimer, setLongPressTimer] = useState<NodeJS.Timeout | null>(null);
   const [currentTimePosition, setCurrentTimePosition] = useState<number | null>(null);
+  const [scrollViewRef, setScrollViewRef] = useState<ScrollView | null>(null);
 
   useEffect(() => {
     loadData();
@@ -45,6 +46,12 @@ export function TimeSlotGrid({ date, onDataChange }: TimeSlotGridProps) {
   }, [date, timeSlots]);
 
   useEffect(() => {
+    // Auto-scroll to current time when component loads or date changes
+    if (currentTimePosition !== null && scrollViewRef && timeSlots.length > 0) {
+      scrollToCurrentTime();
+    }
+  }, [currentTimePosition, scrollViewRef, timeSlots]);
+  useEffect(() => {
     return () => {
       if (longPressTimer) {
         clearTimeout(longPressTimer);
@@ -52,6 +59,21 @@ export function TimeSlotGrid({ date, onDataChange }: TimeSlotGridProps) {
     };
   }, [longPressTimer]);
 
+  const scrollToCurrentTime = () => {
+    if (currentTimePosition !== null && scrollViewRef) {
+      const slotHeight = 47; // 45px slot + 2px margin
+      const scrollPosition = currentTimePosition * slotHeight;
+      const screenCenter = screenHeight / 2;
+      const targetScrollY = Math.max(0, scrollPosition - screenCenter);
+      
+      setTimeout(() => {
+        scrollViewRef.scrollTo({
+          y: targetScrollY,
+          animated: true,
+        });
+      }, 100); // Small delay to ensure layout is complete
+    }
+  };
   const updateCurrentTimePosition = () => {
     const now = new Date();
     const today = now.toISOString().split('T')[0];
@@ -307,6 +329,7 @@ export function TimeSlotGrid({ date, onDataChange }: TimeSlotGridProps) {
         animationType="fade"
         transparent={true}
         visible={showCategoryModal}
+        ref={setScrollViewRef}
         onRequestClose={closeCategoryModal}
       >
         <Pressable style={styles.modalOverlay} onPress={closeCategoryModal}>
