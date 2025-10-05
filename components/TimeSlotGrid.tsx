@@ -98,7 +98,27 @@ export function TimeSlotGrid({ date, onDataChange }: TimeSlotGridProps) {
   };
 
   const handleSlotPress = (time: string) => {
-    if (isDragging) return;
+    if (isDragging) {
+      // In multi-select mode, tapping a slot completes the selection
+      const currentIndex = timeSlots.findIndex(s => s.time === time);
+      if (dragStartIndex !== null && currentIndex >= dragStartIndex) {
+        // Select range from start to current slot
+        const rangeSlots = timeSlots
+          .slice(dragStartIndex, currentIndex + 1)
+          .filter(slot => !slot.category) // Only select empty slots
+          .map(slot => slot.time);
+        setSelectedSlots(rangeSlots);
+        
+        // End drag mode and show modal
+        setIsDragging(false);
+        setDragStartIndex(null);
+        
+        if (rangeSlots.length > 0) {
+          setModalVisible(true);
+        }
+      }
+      return;
+    }
     
     const slot = timeSlots.find(s => s.time === time);
     if (slot?.category) {
@@ -128,36 +148,11 @@ export function TimeSlotGrid({ date, onDataChange }: TimeSlotGridProps) {
       // For filled slots, show delete confirmation
       handleSlotPress(time);
     } else {
-      // Start drag selection for empty slots
+      // Start multi-select mode for empty slots
       setIsDragging(true);
       setDragStartIndex(index);
       setSelectedSlots([time]);
     }
-  };
-
-  const handleSlotMove = (time: string, index: number) => {
-    if (isDragging && dragStartIndex !== null) {
-      // Only allow downward selection
-      if (index >= dragStartIndex) {
-        const rangeSlots = timeSlots
-          .slice(dragStartIndex, index + 1)
-          .filter(slot => !slot.category) // Only select empty slots
-          .map(slot => slot.time);
-        setSelectedSlots(rangeSlots);
-      }
-    }
-  };
-
-  const handleDragEnd = () => {
-    if (isDragging && selectedSlots.length > 0) {
-      // Small delay to ensure state is updated
-      setTimeout(() => {
-        setModalVisible(true);
-      }, 100);
-    }
-    
-    setIsDragging(false);
-    setDragStartIndex(null);
   };
 
   const handleCategorySelect = async (categoryId: number) => {
@@ -201,7 +196,13 @@ export function TimeSlotGrid({ date, onDataChange }: TimeSlotGridProps) {
 
   const getHeaderText = () => {
     if (selectedSlots.length > 0) {
+      if (isDragging) {
+        return `Multi-select mode: ${selectedSlots.length} slot${selectedSlots.length > 1 ? 's' : ''} selected - Tap end slot`;
+      }
       return `${selectedSlots.length} slot${selectedSlots.length > 1 ? 's' : ''} selected`;
+    }
+    if (isDragging) {
+      return 'Multi-select mode: Tap another slot to select range';
     }
     return 'Tap to assign • Long press & drag to select multiple';
   };
@@ -233,13 +234,7 @@ export function TimeSlotGrid({ date, onDataChange }: TimeSlotGridProps) {
             />
           )}
           
-          <View
-            onTouchEnd={() => {
-              if (isDragging) {
-                handleDragEnd();
-              }
-            }}
-          >
+          <View>
             {timeSlots.map((slot, index) => (
               <TouchableOpacity
                 key={slot.time}
@@ -247,15 +242,10 @@ export function TimeSlotGrid({ date, onDataChange }: TimeSlotGridProps) {
                   styles.slot,
                   slot.category && { backgroundColor: slot.category.color },
                   selectedSlots.includes(slot.time) && styles.selectedSlot,
-                  isDragging && styles.draggingMode,
+                  isDragging && !selectedSlots.includes(slot.time) && styles.draggingMode,
                 ]}
                 onPress={() => handleSlotPress(slot.time)}
                 onLongPress={() => handleLongPress(slot.time, index)}
-                onPressIn={() => {
-                  if (isDragging) {
-                    handleSlotMove(slot.time, index);
-                  }
-                }}
                 delayLongPress={500}
               >
                 <View style={styles.slotContent}>
