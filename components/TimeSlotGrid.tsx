@@ -135,7 +135,7 @@ export function TimeSlotGrid({ date, onDataChange }: TimeSlotGridProps) {
     }
   };
 
-  const handleSlotMove = (index: number) => {
+  const handleSlotMove = (time: string, index: number) => {
     if (isDragging && dragStartIndex !== null) {
       // Only allow downward selection
       if (index >= dragStartIndex) {
@@ -149,13 +149,13 @@ export function TimeSlotGrid({ date, onDataChange }: TimeSlotGridProps) {
   };
 
   const handleDragEnd = () => {
-    setIsDragging(false);
-    setDragStartIndex(null);
-    
     // Show modal if we have selected slots
     if (selectedSlots.length > 0) {
       setModalVisible(true);
     }
+    
+    setIsDragging(false);
+    setDragStartIndex(null);
   };
 
   const handleCategorySelect = async (categoryId: number) => {
@@ -242,14 +242,11 @@ export function TimeSlotGrid({ date, onDataChange }: TimeSlotGridProps) {
               ]}
               onPress={() => handleSlotPress(slot.time)}
               onLongPress={() => handleLongPress(slot.time, index)}
-              onPressIn={() => {
-                if (isDragging) {
-                  handleSlotMove(index);
-                }
-              }}
+              onPressIn={() => handleSlotMove(slot.time, index)}
               onPressOut={() => {
                 if (isDragging) {
-                  // Continue drag selection
+                  // Handle drag end when finger lifts
+                  handleDragEnd();
                 }
               }}
               delayLongPress={500}
