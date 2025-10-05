@@ -149,9 +149,11 @@ export function TimeSlotGrid({ date, onDataChange }: TimeSlotGridProps) {
   };
 
   const handleDragEnd = () => {
-    // Show modal if we have selected slots
-    if (selectedSlots.length > 0) {
-      setModalVisible(true);
+    if (isDragging && selectedSlots.length > 0) {
+      // Small delay to ensure state is updated
+      setTimeout(() => {
+        setModalVisible(true);
+      }, 100);
     }
     
     setIsDragging(false);
@@ -231,34 +233,40 @@ export function TimeSlotGrid({ date, onDataChange }: TimeSlotGridProps) {
             />
           )}
           
-          {timeSlots.map((slot, index) => (
-            <TouchableOpacity
-              key={slot.time}
-              style={[
-                styles.slot,
-                slot.category && { backgroundColor: slot.category.color },
-                selectedSlots.includes(slot.time) && styles.selectedSlot,
-                isDragging && styles.draggingMode,
-              ]}
-              onPress={() => handleSlotPress(slot.time)}
-              onLongPress={() => handleLongPress(slot.time, index)}
-              onPressIn={() => handleSlotMove(slot.time, index)}
-              onPressOut={() => {
-                if (isDragging) {
-                  // Handle drag end when finger lifts
-                  handleDragEnd();
-                }
-              }}
-              delayLongPress={500}
-            >
-              <View style={styles.slotContent}>
-                <Text style={styles.timeText}>{formatTime(slot.time)}</Text>
-                {slot.category && (
-                  <Text style={styles.categoryText}>{slot.category.name}</Text>
-                )}
-              </View>
-            </TouchableOpacity>
-          ))}
+          <View
+            onTouchEnd={() => {
+              if (isDragging) {
+                handleDragEnd();
+              }
+            }}
+          >
+            {timeSlots.map((slot, index) => (
+              <TouchableOpacity
+                key={slot.time}
+                style={[
+                  styles.slot,
+                  slot.category && { backgroundColor: slot.category.color },
+                  selectedSlots.includes(slot.time) && styles.selectedSlot,
+                  isDragging && styles.draggingMode,
+                ]}
+                onPress={() => handleSlotPress(slot.time)}
+                onLongPress={() => handleLongPress(slot.time, index)}
+                onPressIn={() => {
+                  if (isDragging) {
+                    handleSlotMove(slot.time, index);
+                  }
+                }}
+                delayLongPress={500}
+              >
+                <View style={styles.slotContent}>
+                  <Text style={styles.timeText}>{formatTime(slot.time)}</Text>
+                  {slot.category && (
+                    <Text style={styles.categoryText}>{slot.category.name}</Text>
+                  )}
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
         </View>
       </ScrollView>
 
