@@ -69,7 +69,7 @@ export default function SettingsScreen() {
 
   const showAbout = () => {
     Alert.alert(
-      'About Time Tracker',
+      'About TimeBlock',
       'A comprehensive time tracking app that helps you monitor your daily activities in 15-minute intervals.\n\nVersion 1.0.0\nBuilt with Expo and React Native',
       [{ text: 'OK' }]
     );
@@ -132,7 +132,7 @@ export default function SettingsScreen() {
 
         <View style={styles.footer}>
           <Text style={styles.footerText}>
-            Time Tracker v1.0.0{'\n'}
+            TimeBlock v1.0.0{'\n'}
             Built with React Native & Expo
           </Text>
         </View>

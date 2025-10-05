@@ -136,22 +136,26 @@ export function TimeSlotGrid({ date, onDataChange }: TimeSlotGridProps) {
   };
 
   const handleSlotMove = (index: number) => {
-    if (isDragging && dragStartIndex !== null && index >= dragStartIndex) {
+    if (isDragging && dragStartIndex !== null) {
       // Only allow downward selection
-      const rangeSlots = timeSlots
-        .slice(dragStartIndex, index + 1)
-        .filter(slot => !slot.category) // Only select empty slots
-        .map(slot => slot.time);
-      setSelectedSlots(rangeSlots);
+      if (index >= dragStartIndex) {
+        const rangeSlots = timeSlots
+          .slice(dragStartIndex, index + 1)
+          .filter(slot => !slot.category) // Only select empty slots
+          .map(slot => slot.time);
+        setSelectedSlots(rangeSlots);
+      }
     }
   };
 
   const handleDragEnd = () => {
-    if (isDragging && selectedSlots.length > 0) {
-      setModalVisible(true);
-    }
     setIsDragging(false);
     setDragStartIndex(null);
+    
+    // Show modal if we have selected slots
+    if (selectedSlots.length > 0) {
+      setModalVisible(true);
+    }
   };
 
   const handleCategorySelect = async (categoryId: number) => {
@@ -238,7 +242,16 @@ export function TimeSlotGrid({ date, onDataChange }: TimeSlotGridProps) {
               ]}
               onPress={() => handleSlotPress(slot.time)}
               onLongPress={() => handleLongPress(slot.time, index)}
-              onPressIn={() => isDragging && handleSlotMove(index)}
+              onPressIn={() => {
+                if (isDragging) {
+                  handleSlotMove(index);
+                }
+              }}
+              onPressOut={() => {
+                if (isDragging) {
+                  // Continue drag selection
+                }
+              }}
               delayLongPress={500}
             >
               <View style={styles.slotContent}>
@@ -281,6 +294,7 @@ export function TimeSlotGrid({ date, onDataChange }: TimeSlotGridProps) {
                   key={category.id}
                   style={[styles.categoryButton, { backgroundColor: category.color }]}
                   onPress={() => handleCategorySelect(category.id)}
+                  activeOpacity={0.8}
                 >
                   <Text style={styles.categoryButtonText}>{category.name}</Text>
                 </TouchableOpacity>

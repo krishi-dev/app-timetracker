@@ -19,7 +19,7 @@ export function OnboardingModal({ visible, onComplete }: OnboardingModalProps) {
 
   const steps = [
     {
-      title: 'Welcome to Time Tracker!',
+      title: 'Welcome to TimeBlock!',
       subtitle: 'Track your time in 15-minute intervals',
       icon: <Clock size={64} color="#3b82f6" />,
       content: (
